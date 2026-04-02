@@ -431,16 +431,6 @@
     color: var(--accent);
   }
 
-  .export-chip.disabled-chip {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
-  .export-chip.disabled-chip:hover {
-    color: var(--text-dim);
-    border-color: var(--border);
-    background: var(--surface-2);
-  }
-
   /* -- Theme toggle -- */
   .theme-toggle {
     position: absolute;
@@ -564,24 +554,22 @@
           <button class="chip export-chip" data-format="molfile">Molfile</button>
           <button class="chip export-chip" data-format="inchi">InChI</button>
           <button class="chip export-chip" data-format="inchikey">InChIKey</button>
-          <button class="chip export-chip disabled-chip" data-format="smarts" title="Requires direct Ketcher API — available when self-hosted">SMARTS</button>
-          <button class="chip export-chip disabled-chip" data-format="rxn" title="Requires direct Ketcher API — available when self-hosted">RXN</button>
-          <button class="chip export-chip disabled-chip" data-format="cdxml" title="Requires direct Ketcher API — available when self-hosted">CDXML</button>
+          <button class="chip export-chip" data-format="smarts">SMARTS</button>
+          <button class="chip export-chip" data-format="rxn">RXN</button>
+          <button class="chip export-chip" data-format="cdxml">CDXML</button>
         </div>
       </div>
 
       <div class="editor-card">
         <div class="section-label">Structure Editor</div>
-        <!-- Ketcher iframe editor. Self-hosting: clone https://github.com/mireklzicar/ketcher-docker,
-             run docker build -t ketcher . && docker run -p 8080:80 ketcher,
-             then change src to http://localhost:8080 -->
+        <!-- Ketcher standalone build (EPAM, Apache 2.0) served from same origin.
+             Built from https://github.com/epam/ketcher — see ketcher/ directory. -->
         <div id="editor-container">
-          <!-- Wrapper page applies clip-path on a div to reliably hide
-               Ketcher's 3D and fullscreen buttons, and bridges postMessage -->
           <iframe
             id="ketcher-frame"
-            src="ketcher-embed.html"
+            src="ketcher/index.html"
             title="Ketcher Chemical Structure Editor"
+            sandbox="allow-scripts allow-same-origin"
             allow="clipboard-read; clipboard-write"
             tabindex="0"
           ></iframe>
@@ -595,116 +583,65 @@
 <script src="https://unpkg.com/@rdkit/rdkit@2025.3.4-1.0.0/dist/RDKit_minimal.js"></script>
 
 <script>
-  // ── KetcherBridge — iframe/postMessage communication layer ──
+  // ── KetcherBridge — same-origin direct API access ──
+  // Ketcher (EPAM) is served from the same origin via ketcher/index.html.
+  // It sends { eventType: 'init' } via postMessage when ready, then exposes
+  // iframe.contentWindow.ketcher with the full Ketcher API.
   class KetcherBridge {
     constructor(iframeElement, options = {}) {
       this.iframe = iframeElement;
       this.onReady = options.onReady || (() => {});
       this.readyTimeout = options.readyTimeout || 30000;
-      this._pending = {};
+      this._ketcher = null;
       this._ready = false;
-      // The iframe loads our same-origin wrapper (ketcher-embed.html) which
-      // relays postMessage from the cross-origin Ketcher instance.
-      // Accept messages from same origin (wrapper) and Ketcher origin.
-      this._allowedOrigins = new Set([
-        window.location.origin,
-        'https://ketcher.mireklzicar.com'
-      ]);
 
-      this._messageHandler = (event) => this._handleMessage(event);
+      // Listen for Ketcher's init event (uses eventType, not type)
+      this._messageHandler = (event) => {
+        if (event.data && event.data.eventType === 'init') {
+          this._ready = true;
+          clearTimeout(this._readyTimer);
+          // Access the Ketcher API directly (same-origin)
+          this._ketcher = this.iframe.contentWindow.ketcher;
+          this.onReady();
+        }
+      };
       window.addEventListener('message', this._messageHandler);
 
       this._readyTimer = setTimeout(() => {
         if (!this._ready) {
           if (options.onError) {
-            options.onError('Could not load Ketcher editor. Check your internet connection or consider self-hosting.');
+            options.onError('Could not load Ketcher editor. Check your internet connection.');
           }
         }
       }, this.readyTimeout);
     }
 
-    _handleMessage(event) {
-      if (!this._allowedOrigins.has(event.origin)) return;
-      const data = event.data;
-      if (!data || typeof data !== 'object') return;
-
-      switch (data.type) {
-        case 'init':
-          this._ready = true;
-          clearTimeout(this._readyTimer);
-          this.onReady();
-          break;
-
-        case 'smiles':
-          if (this._pending.smiles) {
-            this._pending.smiles.resolve(data.payload || '');
-            this._pending.smiles = null;
-          }
-          break;
-
-        case 'moleculeSet':
-          if (this._pending.setMolecule) {
-            this._pending.setMolecule.resolve();
-            this._pending.setMolecule = null;
-          }
-          break;
-
-        case 'cleared':
-          if (this._pending.clear) {
-            this._pending.clear.resolve();
-            this._pending.clear = null;
-          }
-          break;
-
-        case 'error':
-          console.error('Ketcher error:', data.error);
-          break;
-      }
-    }
-
-    _post(msg) {
-      if (this.iframe.contentWindow) {
-        this.iframe.contentWindow.postMessage(msg, '*');
-      }
-    }
-
     async getSmiles() {
-      return new Promise((resolve, reject) => {
-        this._pending.smiles = { resolve, reject };
-        this._post({ type: 'getSmiles' });
-        setTimeout(() => {
-          if (this._pending.smiles) {
-            this._pending.smiles.reject(new Error('getSmiles timeout'));
-            this._pending.smiles = null;
-          }
-        }, 5000);
-      });
+      if (!this._ketcher) throw new Error('Ketcher not ready');
+      return await this._ketcher.getSmiles();
     }
 
     async setMolecule(structureString) {
-      return new Promise((resolve, reject) => {
-        this._pending.setMolecule = { resolve, reject };
-        this._post({ type: 'setMolecule', payload: structureString });
-        setTimeout(() => {
-          if (this._pending.setMolecule) {
-            this._pending.setMolecule.reject(new Error('setMolecule timeout'));
-            this._pending.setMolecule = null;
-          }
-        }, 5000);
-      });
+      if (!this._ketcher) throw new Error('Ketcher not ready');
+      await this._ketcher.setMolecule(structureString);
     }
 
     async clear() {
-      return new Promise((resolve, reject) => {
-        this._pending.clear = { resolve, reject };
-        this._post({ type: 'clear' });
-        setTimeout(() => {
-          if (this._pending.clear) {
-            this._pending.clear.reject(new Error('clear timeout'));
-            this._pending.clear = null;
-          }
-        }, 5000);
-      });
+      if (!this._ketcher) throw new Error('Ketcher not ready');
+      // Ketcher API: setMolecule with empty string clears the canvas
+      await this._ketcher.setMolecule('');
+    }
+
+    // Inject CSS into the same-origin Ketcher iframe
+    injectCSS(css) {
+      try {
+        const doc = this.iframe.contentDocument || this.iframe.contentWindow.document;
+        const style = doc.createElement('style');
+        style.textContent = css;
+        doc.head.appendChild(style);
+      } catch (e) {
+        console.warn('Could not inject CSS into Ketcher iframe:', e);
+      }
     }
 
     destroy() {
@@ -906,7 +843,6 @@
     const chips = document.querySelectorAll('.export-chip');
     chips.forEach(chip => {
       chip.addEventListener('click', () => {
-        if (chip.classList.contains('disabled-chip')) return;
         chips.forEach(c => c.classList.remove('active'));
         chip.classList.add('active');
         activeExportFormat = chip.dataset.format;
@@ -988,16 +924,48 @@
         }
         break;
       case 'smarts':
+        try {
+          const smarts = await ketcherBridge._ketcher.getSmarts();
+          smilesInput.value = smarts;
+          updateCopyData(smarts);
+        } catch (e) {
+          smilesInput.value = 'SMARTS export failed: ' + e.message;
+          updateCopyData('');
+        }
+        break;
       case 'rxn':
+        try {
+          const rxn = await ketcherBridge._ketcher.getRxn();
+          smilesInput.value = rxn;
+          updateCopyData(rxn);
+        } catch (e) {
+          smilesInput.value = 'RXN export failed: ' + e.message;
+          updateCopyData('');
+        }
+        break;
       case 'cdxml':
-        smilesInput.value = '[' + activeExportFormat.toUpperCase() + ' export requires direct Ketcher API \u2014 available when self-hosted]';
-        updateCopyData('');
+        try {
+          const cdxml = await ketcherBridge._ketcher.getCDXml();
+          smilesInput.value = cdxml;
+          updateCopyData(cdxml);
+        } catch (e) {
+          smilesInput.value = 'CDXML export failed: ' + e.message;
+          updateCopyData('');
+        }
         break;
     }
   }
 
   // ── Initialize Ketcher ──
   function onKetcherReady() {
+    // Hide 3D viewer and fullscreen buttons via CSS injection (same-origin)
+    ketcherBridge.injectCSS(`
+      [data-testid="3D Viewer button"],
+      [data-testid="fullscreen-mode-button"] {
+        display: none !important;
+      }
+    `);
+
     const loadingScreen = document.getElementById('loading-screen');
     if (loadingScreen) {
       loadingScreen.classList.add('fade-out');
