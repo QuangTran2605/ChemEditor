@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Ketcher Embed</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #fff; }
+
+  /* Clip-path on a wrapper div reliably clips iframe content.
+     Cuts a rectangle from the top-right corner to remove
+     Ketcher's 3D and fullscreen buttons from the toolbar. */
+  #clip-wrapper {
+    width: 100%;
+    height: 100%;
+    clip-path: polygon(
+      0 0,
+      calc(100% - 90px) 0,
+      calc(100% - 90px) 44px,
+      100% 44px,
+      100% 100%,
+      0 100%
+    );
+  }
+
+  #ketcher-inner {
+    width: 100%;
+    height: 100%;
+    border: none;
+  }
+</style>
+</head>
+<body>
+
+<div id="clip-wrapper">
+  <iframe
+    id="ketcher-inner"
+    src="https://ketcher.mireklzicar.com/"
+    title="Ketcher Chemical Structure Editor"
+    allow="clipboard-read; clipboard-write"
+  ></iframe>
+</div>
+
+<script>
+  // This wrapper page bridges postMessage between the parent page and Ketcher.
+  // It also applies clip-path on a div (not the iframe) to reliably hide
+  // the 3D and fullscreen buttons in Ketcher's toolbar.
+
+  const KETCHER_ORIGIN = 'https://ketcher.mireklzicar.com';
+  const parentOrigin = document.referrer ? new URL(document.referrer).origin : '*';
+  const ketcherFrame = document.getElementById('ketcher-inner');
+
+  // Forward messages from Ketcher → parent
+  window.addEventListener('message', (event) => {
+    if (event.origin === KETCHER_ORIGIN && event.data && typeof event.data === 'object') {
+      // Relay Ketcher messages to parent
+      window.parent.postMessage(event.data, '*');
+    }
+  });
+
+  // Forward messages from parent → Ketcher
+  window.addEventListener('message', (event) => {
+    // Accept messages from any parent origin (same-origin or localhost dev servers)
+    if (event.source === window.parent && event.data && typeof event.data === 'object') {
+      // Relay parent messages to Ketcher
+      if (ketcherFrame.contentWindow) {
+        ketcherFrame.contentWindow.postMessage(event.data, '*');
+      }
+    }
+  });
+</script>
+</body>
+</html>

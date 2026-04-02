@@ -250,8 +250,6 @@
     border: none;
     border-radius: 8px;
     background: #fff;
-    /* Clip out the top-right corner to hide 3D and fullscreen buttons */
-    clip-path: polygon(0 0, calc(100% - 62px) 0, calc(100% - 62px) 42px, 100% 42px, 100% 100%, 0 100%);
   }
 
   /* -- SMILES I/O card -- */
@@ -578,9 +576,11 @@
              run docker build -t ketcher . && docker run -p 8080:80 ketcher,
              then change src to http://localhost:8080 -->
         <div id="editor-container">
+          <!-- Wrapper page applies clip-path on a div to reliably hide
+               Ketcher's 3D and fullscreen buttons, and bridges postMessage -->
           <iframe
             id="ketcher-frame"
-            src="https://ketcher.mireklzicar.com/"
+            src="ketcher-embed.html"
             title="Ketcher Chemical Structure Editor"
             allow="clipboard-read; clipboard-write"
             tabindex="0"
@@ -603,7 +603,13 @@
       this.readyTimeout = options.readyTimeout || 30000;
       this._pending = {};
       this._ready = false;
-      this._origin = new URL(iframeElement.src).origin;
+      // The iframe loads our same-origin wrapper (ketcher-embed.html) which
+      // relays postMessage from the cross-origin Ketcher instance.
+      // Accept messages from same origin (wrapper) and Ketcher origin.
+      this._allowedOrigins = new Set([
+        window.location.origin,
+        'https://ketcher.mireklzicar.com'
+      ]);
 
       this._messageHandler = (event) => this._handleMessage(event);
       window.addEventListener('message', this._messageHandler);
@@ -618,7 +624,7 @@
     }
 
     _handleMessage(event) {
-      if (event.origin !== this._origin) return;
+      if (!this._allowedOrigins.has(event.origin)) return;
       const data = event.data;
       if (!data || typeof data !== 'object') return;
 
