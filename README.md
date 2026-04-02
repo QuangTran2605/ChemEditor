@@ -53,7 +53,9 @@ Full-featured SMILES analysis tool powered by [RDKit.js](https://github.com/rdki
 - **Composition analysis** — Color-coded element bar + mass percentage table
 - **2D structure** — RDKit SVG rendering with theme-aware bond colors
 - **3D viewer** — Interactive 3Dmol.js viewer with stick/ball-and-stick/sphere/line styles, auto-rotate, and H visibility toggle
-- **NMR prediction** — SMARTS-based 1H NMR chemical shift prediction with interactive spectrum
+- **¹H NMR prediction** — SMARTS-based 1H NMR chemical shift prediction with interactive spectrum, splitting patterns, coupling constants, and integration curve
+- **¹³C NMR prediction** — SMARTS-based 13C NMR chemical shift prediction (broadband decoupled, 0–250 ppm range) with interactive spectrum and peak table
+- **Collapsible NMR panels** — Both NMR spectra are presented as expandable dropdown sections to keep the UI clean
 - **Conversion history** — Last 10 conversions stored in localStorage
 - **100+ example molecules** — Random selection of common chemicals as quick-try chips
 - **URL parameters** — Auto-convert via `?smiles=CCO`

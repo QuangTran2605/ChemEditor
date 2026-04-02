@@ -930,6 +930,60 @@
     margin-top: 0.4rem;
   }
 
+  .nmr-dropdown-header {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+    padding: 0.2rem 0;
+    gap: 0.45rem;
+  }
+
+  .nmr-dropdown-header:hover { opacity: 0.85; }
+
+  .nmr-dropdown-arrow {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    font-size: 0.55rem;
+    color: var(--text-dim);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    transition: transform 0.2s ease, background 0.15s;
+    flex-shrink: 0;
+  }
+
+  .nmr-dropdown-header:hover .nmr-dropdown-arrow {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+
+  .nmr-dropdown-arrow.open {
+    transform: rotate(90deg);
+  }
+
+  .nmr-dropdown-content {
+    overflow: hidden;
+    transition: max-height 0.3s ease, opacity 0.25s ease;
+    max-height: 0;
+    opacity: 0;
+  }
+
+  .nmr-dropdown-content.open {
+    max-height: 3000px;
+    opacity: 1;
+  }
+
+  .nmr-dropdown + .nmr-dropdown {
+    margin-top: 0.8rem;
+    padding-top: 0.8rem;
+    border-top: 1px solid var(--border);
+  }
+
   @media (max-width: 520px) {
     .meta-grid { grid-template-columns: 1fr; }
     .formula-display .formula { font-size: 1.8rem; }
@@ -1250,6 +1304,60 @@
   ];
 
   const SPEC_FREQ = 400; // simulated spectrometer frequency in MHz
+
+  // ── ¹³C NMR Shift Rules (SMARTS, most-specific first) ──
+  const CNMR_SHIFT_RULES = [
+    // Carbonyl carbons
+    { smarts: '[CX3H1]=O', shift: 200.0, label: 'Aldehyde C=O' },
+    { smarts: '[CX3](=O)([#6])[#6]', shift: 205.0, label: 'Ketone C=O' },
+    { smarts: '[CX3](=O)[OX2H1]', shift: 175.0, label: 'COOH' },
+    { smarts: '[CX3](=O)[OX2][#6]', shift: 171.0, label: 'Ester C=O' },
+    { smarts: '[CX3](=O)[NX3]', shift: 170.0, label: 'Amide C=O' },
+    { smarts: '[CX3](=O)[#6]', shift: 197.0, label: 'C=O' },
+    // Aromatic carbons (substituted)
+    { smarts: '[cX3]([OX2H1])', shift: 155.0, label: 'Aromatic C-OH' },
+    { smarts: '[cX3]([OX2][#6])', shift: 158.0, label: 'Aromatic C-OR' },
+    { smarts: '[cX3]([NX3H2])', shift: 148.0, label: 'Aromatic C-NH\u2082' },
+    { smarts: '[cX3]([NX3])', shift: 150.0, label: 'Aromatic C-NR' },
+    { smarts: '[cX3][F]', shift: 163.0, label: 'Aromatic C-F' },
+    { smarts: '[cX3][Cl]', shift: 134.0, label: 'Aromatic C-Cl' },
+    { smarts: '[cX3][Br]', shift: 122.0, label: 'Aromatic C-Br' },
+    { smarts: '[cX3][I]', shift: 94.0, label: 'Aromatic C-I' },
+    { smarts: '[cX3]([CX3]=O)', shift: 137.0, label: 'Aromatic C-C=O' },
+    { smarts: '[cX3]([CX4])', shift: 137.0, label: 'Aromatic C-R' },
+    // Aromatic CH and heteroaromatic
+    { smarts: '[cX3]1[cX3][nX2][cX3][cX3][cX3]1', shift: 150.0, label: 'Pyridine C' },
+    { smarts: '[nX2]', shift: 0, label: '', skip: true },
+    { smarts: '[cX3H1]', shift: 127.0, label: 'Aromatic CH' },
+    { smarts: '[cX3]', shift: 135.0, label: 'Aromatic C' },
+    // Alkyne
+    { smarts: '[CX2]#[CX2]', shift: 75.0, label: 'Alkyne C' },
+    // Alkene
+    { smarts: '[CX3]=[CX3]', shift: 125.0, label: 'Vinyl C' },
+    // C-O environments
+    { smarts: '[CX4H3][OX2]', shift: 55.0, label: 'CH\u2083-O' },
+    { smarts: '[CX4H2][OX2]', shift: 67.0, label: 'CH\u2082-O' },
+    { smarts: '[CX4H1][OX2]', shift: 75.0, label: 'CH-O' },
+    { smarts: '[CX4H0][OX2]', shift: 80.0, label: 'C-O (quat)' },
+    // C-N environments
+    { smarts: '[CX4H3][NX3]', shift: 33.0, label: 'CH\u2083-N' },
+    { smarts: '[CX4H2][NX3]', shift: 42.0, label: 'CH\u2082-N' },
+    { smarts: '[CX4H1][NX3]', shift: 55.0, label: 'CH-N' },
+    // C-halogen
+    { smarts: '[CX4][F]', shift: 85.0, label: 'C-F' },
+    { smarts: '[CX4][Cl]', shift: 45.0, label: 'C-Cl' },
+    { smarts: '[CX4][Br]', shift: 35.0, label: 'C-Br' },
+    { smarts: '[CX4][I]', shift: 20.0, label: 'C-I' },
+    // Alpha to C=O
+    { smarts: '[CX4H3][CX3]=O', shift: 30.0, label: 'CH\u2083-C=O' },
+    { smarts: '[CX4H2][CX3]=O', shift: 38.0, label: 'CH\u2082-C=O' },
+    { smarts: '[CX4H1][CX3]=O', shift: 42.0, label: 'CH-C=O' },
+    // Plain alkyl (fallbacks)
+    { smarts: '[CX4H3]', shift: 15.0, label: 'Alkyl CH\u2083' },
+    { smarts: '[CX4H2]', shift: 25.0, label: 'Alkyl CH\u2082' },
+    { smarts: '[CX4H1]', shift: 30.0, label: 'Alkyl CH' },
+    { smarts: '[CX4H0]', shift: 35.0, label: 'Quaternary C' },
+  ];
 
   // ── Aromatic substituent influence (Hays-type corrections relative to benzene 7.27) ──
   // Keyed by atomic number or functional group type at ring attachment point
@@ -1720,9 +1828,92 @@
     return { peaks };
   }
 
+  // ── ¹³C NMR Prediction ──
+  function predictCNMR(molJsonStr, mol, rdkit) {
+    const molJson = JSON.parse(molJsonStr);
+    const atoms = molJson.molecules[0].atoms;
+    const bonds = molJson.molecules[0].bonds || [];
+    const defaults = molJson.defaults || {};
+    const defaultZ = defaults?.atom?.z ?? 6;
+
+    const { classes: morganClasses } = computeMorganClasses(atoms, bonds, defaults);
+
+    // Group carbon atoms by equivalence class
+    const classGroups = new Map();
+    for (let i = 0; i < atoms.length; i++) {
+      const z = atoms[i].z ?? defaultZ;
+      if (z !== 6) continue; // only carbon
+      const cls = morganClasses.get(i);
+      if (!classGroups.has(cls)) classGroups.set(cls, []);
+      classGroups.get(cls).push(i);
+    }
+
+    if (classGroups.size === 0) return { peaks: [] };
+
+    // Pre-create qmol objects for SMARTS matching
+    const qmols = [];
+    for (const rule of CNMR_SHIFT_RULES) {
+      const qmol = rdkit.get_qmol(rule.smarts);
+      qmols.push(qmol);
+    }
+
+    // Get all matches
+    const allMatches = [];
+    for (let r = 0; r < CNMR_SHIFT_RULES.length; r++) {
+      if (!qmols[r] || !qmols[r].is_valid()) {
+        allMatches.push([]);
+        continue;
+      }
+      try {
+        const matchStr = mol.get_substruct_matches(qmols[r]);
+        const parsed = JSON.parse(matchStr);
+        allMatches.push(Array.isArray(parsed) ? parsed : []);
+      } catch(e) {
+        allMatches.push([]);
+      }
+    }
+
+    for (const q of qmols) { if (q) try { q.delete(); } catch(e) {} }
+
+    // Classify a carbon atom — find first matching rule
+    function classifyCarbon(atomIdx) {
+      for (let r = 0; r < CNMR_SHIFT_RULES.length; r++) {
+        const rule = CNMR_SHIFT_RULES[r];
+        if (rule.skip) continue;
+        const matches = allMatches[r];
+        for (const match of matches) {
+          const matchAtoms = match.atoms ?? match;
+          if (matchAtoms[0] === atomIdx) return rule;
+        }
+      }
+      return { shift: 30.0, label: 'C' };
+    }
+
+    const peaks = [];
+    for (const [cls, atomIndices] of classGroups) {
+      const repAtom = atomIndices[0];
+      const rule = classifyCarbon(repAtom);
+      const equivCount = atomIndices.length;
+      peaks.push({
+        shift: rule.shift,
+        assignment: rule.label,
+        carbonCount: equivCount,
+        atomIndices,
+      });
+    }
+
+    peaks.sort((a, b) => b.shift - a.shift);
+    return { peaks };
+  }
+
   // ── NMR Interactive Spectrum Renderer ──
-  function renderNMRSpectrumHTML(peaks) {
+  // opts: { prefix, rangeMin, rangeMax, showIntegToggle }
+  function renderNMRSpectrumHTML(peaks, opts) {
     if (!peaks || peaks.length === 0) return '';
+    const p = (opts && opts.prefix) || 'nmr';
+    const rMin = (opts && opts.rangeMin != null) ? opts.rangeMin : -1;
+    const rMax = (opts && opts.rangeMax != null) ? opts.rangeMax : 15;
+    const showIntegToggle = opts && opts.showIntegToggle !== false;
     // Toolbar icons as inline SVG paths
     const iconZoomIn = '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>';
     const iconZoomOut = '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>';
@@ -1730,51 +1921,59 @@
     const iconUp = '<svg viewBox="0 0 24 24"><polyline points="18 15 12 9 6 15"/></svg>';
     const iconDown = '<svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>';
 
+    const integBtn = showIntegToggle
+      ? `<button class="nmr-tb-btn" id="${p}-tog-integ" title="Toggle integration curve">\u222b</button>`
+      : '';
+
     return `
-      <div class="nmr-toolbar" id="nmr-toolbar">
+      <div class="nmr-toolbar" id="${p}-toolbar">
         <div class="nmr-tb-group">
           <span class="nmr-tb-label">Zoom</span>
-          <button class="nmr-tb-btn" id="nmr-zoom-in" title="Zoom in">${iconZoomIn}</button>
-          <button class="nmr-tb-btn" id="nmr-zoom-out" title="Zoom out">${iconZoomOut}</button>
-          <button class="nmr-tb-btn" id="nmr-reset" title="Reset view">${iconReset}</button>
+          <button class="nmr-tb-btn" id="${p}-zoom-in" title="Zoom in">${iconZoomIn}</button>
+          <button class="nmr-tb-btn" id="${p}-zoom-out" title="Zoom out">${iconZoomOut}</button>
+          <button class="nmr-tb-btn" id="${p}-reset" title="Reset view">${iconReset}</button>
         </div>
         <div class="nmr-tb-sep"></div>
         <div class="nmr-tb-group">
           <span class="nmr-tb-label">Intensity</span>
-          <button class="nmr-tb-btn" id="nmr-int-up" title="Increase intensity">${iconUp}</button>
-          <button class="nmr-tb-btn" id="nmr-int-down" title="Decrease intensity">${iconDown}</button>
+          <button class="nmr-tb-btn" id="${p}-int-up" title="Increase intensity">${iconUp}</button>
+          <button class="nmr-tb-btn" id="${p}-int-down" title="Decrease intensity">${iconDown}</button>
         </div>
         <div class="nmr-tb-sep"></div>
         <div class="nmr-tb-group">
-          <button class="nmr-tb-btn" id="nmr-tog-shifts" title="Toggle chemical shifts">δ</button>
-          <button class="nmr-tb-btn" id="nmr-tog-integ" title="Toggle integration curve">∫</button>
+          <button class="nmr-tb-btn" id="${p}-tog-shifts" title="Toggle chemical shifts">\u03b4</button>
+          ${integBtn}
         </div>
         <div class="nmr-tb-sep"></div>
         <div class="nmr-tb-group">
           <span class="nmr-tb-label">Range</span>
-          <input type="number" class="nmr-range-input" id="nmr-range-min" value="-1" step="0.5" title="Min ppm">
+          <input type="number" class="nmr-range-input" id="${p}-range-min" value="${rMin}" step="0.5" title="Min ppm">
           <span class="nmr-tb-label" style="margin:0 0.1rem">to</span>
-          <input type="number" class="nmr-range-input" id="nmr-range-max" value="15" step="0.5" title="Max ppm">
+          <input type="number" class="nmr-range-input" id="${p}-range-max" value="${rMax}" step="0.5" title="Max ppm">
           <span class="nmr-tb-label">ppm</span>
         </div>
       </div>
-      <div class="nmr-canvas-wrap" id="nmr-canvas-wrap">
-        <canvas id="nmr-canvas"></canvas>
+      <div class="nmr-canvas-wrap" id="${p}-canvas-wrap">
+        <canvas id="${p}-canvas"></canvas>
       </div>`;
   }
 
   // ── NMR Interactive Viewer (canvas-based) ──
-  function initNMRViewer(peaks) {
-    const canvas = document.getElementById('nmr-canvas');
-    const wrap = document.getElementById('nmr-canvas-wrap');
+  // opts: { prefix, fullMin, fullMax, showInteg (enable integration feature) }
+  function initNMRViewer(peaks, opts) {
+    const p = (opts && opts.prefix) || 'nmr';
+    const canvas = document.getElementById(p + '-canvas');
+    const wrap = document.getElementById(p + '-canvas-wrap');
     if (!canvas || !wrap) return;
     const ctx = canvas.getContext('2d');
 
     // State
-    let viewMin = -1, viewMax = 15; // ppm range (reversed on screen: high ppm = left)
-    const FULL_MIN = -1, FULL_MAX = 15;
+    const FULL_MIN = (opts && opts.fullMin != null) ? opts.fullMin : -1;
+    const FULL_MAX = (opts && opts.fullMax != null) ? opts.fullMax : 15;
+    let viewMin = FULL_MIN, viewMax = FULL_MAX;
     let intensityScale = 1.0;
     let showShifts = false, showInteg = false;
+    const enableInteg = !opts || opts.showInteg !== false;
 
     // Margins (in canvas pixels)
     const ML = 10, MR = 10, MT = 30, MB = 38;
@@ -1783,19 +1982,20 @@
     const linewidth = 0.012;
     const subPeaks = [];
     for (const peak of peaks) {
-      const n = peak.nCoupled + 1;
+      const n = (peak.nCoupled != null ? peak.nCoupled : 0) + 1;
       const patIdx = Math.min(n, 7) - 1;
       const pascal = PASCAL_TRIANGLE[patIdx] || [1];
       const maxP = Math.max(...pascal);
-      const J = peak.couplingConstants.length > 0 ? peak.couplingConstants[0].J : 0;
+      const J = (peak.couplingConstants && peak.couplingConstants.length > 0) ? peak.couplingConstants[0].J : 0;
       const jPpm = J / SPEC_FREQ;
       const center = peak.shift;
       const totalWidth = (pascal.length - 1) * jPpm;
       const startPpm = center - totalWidth / 2;
+      const ampScale = peak.hydrogenCount || peak.carbonCount || 1;
       for (let i = 0; i < pascal.length; i++) {
-        const amp = (pascal[i] / maxP) * peak.hydrogenCount;
+        const amp = (pascal[i] / maxP) * ampScale;
         const pos = startPpm + i * jPpm;
-        subPeaks.push({ pos, amp, isLabile: peak.isLabile });
+        subPeaks.push({ pos, amp, isLabile: !!peak.isLabile });
       }
     }
 
@@ -1963,7 +2163,7 @@
       ctx.stroke();
 
       // Integration curve
-      if (showInteg) {
+      if (showInteg && enableInteg) {
         const integH = 18;
         let runSum = 0;
         const integData = new Float64Array(nSamples);
@@ -1998,7 +2198,10 @@
           ctx.fillText(peak.shift.toFixed(2), x, labelY1);
           ctx.fillStyle = c.textDim;
           ctx.font = '6.5px "IBM Plex Mono", monospace';
-          ctx.fillText(peak.splittingAbbrev + ', ' + peak.hydrogenCount + 'H', x, labelY2);
+          const peakDetail = peak.splittingAbbrev
+            ? peak.splittingAbbrev + ', ' + peak.hydrogenCount + 'H'
+            : (peak.carbonCount ? peak.carbonCount + 'C' : '');
+          ctx.fillText(peakDetail, x, labelY2);
           ctx.font = '7.5px "IBM Plex Mono", monospace';
         }
       }
@@ -2021,8 +2224,8 @@
     }
 
     // ── Range inputs ──
-    const rangeMinInput = document.getElementById('nmr-range-min');
-    const rangeMaxInput = document.getElementById('nmr-range-max');
+    const rangeMinInput = document.getElementById(p + '-range-min');
+    const rangeMaxInput = document.getElementById(p + '-range-max');
 
     function syncRangeInputs() {
       if (rangeMinInput) rangeMinInput.value = parseFloat(viewMin.toFixed(1));
@@ -2176,31 +2379,31 @@
     }, { passive: false });
 
     // Toolbar buttons
-    document.getElementById('nmr-zoom-in')?.addEventListener('click', () => {
+    document.getElementById(p + '-zoom-in')?.addEventListener('click', () => {
       zoom(0.7, (viewMin + viewMax) / 2);
     });
-    document.getElementById('nmr-zoom-out')?.addEventListener('click', () => {
+    document.getElementById(p + '-zoom-out')?.addEventListener('click', () => {
       zoom(1.4, (viewMin + viewMax) / 2);
     });
-    document.getElementById('nmr-reset')?.addEventListener('click', () => {
+    document.getElementById(p + '-reset')?.addEventListener('click', () => {
       viewMin = FULL_MIN; viewMax = FULL_MAX; intensityScale = 1.0;
       syncRangeInputs(); draw();
     });
-    document.getElementById('nmr-int-up')?.addEventListener('click', () => {
+    document.getElementById(p + '-int-up')?.addEventListener('click', () => {
       intensityScale = Math.min(intensityScale * 1.4, 50); draw();
     });
-    document.getElementById('nmr-int-down')?.addEventListener('click', () => {
+    document.getElementById(p + '-int-down')?.addEventListener('click', () => {
       intensityScale = Math.max(intensityScale / 1.4, 0.1); draw();
     });
 
-    const shiftBtn = document.getElementById('nmr-tog-shifts');
+    const shiftBtn = document.getElementById(p + '-tog-shifts');
     shiftBtn?.addEventListener('click', () => {
       showShifts = !showShifts;
       shiftBtn.classList.toggle('active', showShifts);
       draw();
     });
 
-    const integBtn = document.getElementById('nmr-tog-integ');
+    const integBtn = document.getElementById(p + '-tog-integ');
     integBtn?.addEventListener('click', () => {
       showInteg = !showInteg;
       integBtn.classList.toggle('active', showInteg);
@@ -2231,6 +2434,26 @@
         <td>${p.assignment}</td>
       </tr>`;
     }).join('');
+  }
+
+  // ── ¹³C NMR Peak Table ──
+  function buildCNMRTable(peaks) {
+    return peaks.map(p => {
+      return `<tr>
+        <td>${p.shift.toFixed(1)}</td>
+        <td>${p.carbonCount}</td>
+        <td>${p.assignment}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // ── NMR Dropdown Toggle ──
+  function toggleNMRDropdown(header) {
+    const arrow = header.querySelector('.nmr-dropdown-arrow');
+    const content = header.nextElementSibling;
+    const isOpen = content.classList.contains('open');
+    arrow.classList.toggle('open', !isOpen);
+    content.classList.toggle('open', !isOpen);
   }
 
   // ── DOM refs ──
@@ -2355,17 +2578,18 @@
     const myNmrId = ++nmrConversionId;
     setTimeout(() => {
       if (myNmrId !== nmrConversionId) return; // stale
-      let nmrData = null;
+      let hNmrData = null, cNmrData = null;
       try {
         const mol2 = RDKit.get_mol(canonical);
         if (mol2 && mol2.is_valid()) {
-          // Use mol2's own JSON so atom indices match SMARTS results
-          nmrData = predictHNMR(mol2.get_json(), mol2, RDKit);
+          const mol2Json = mol2.get_json();
+          hNmrData = predictHNMR(mol2Json, mol2, RDKit);
+          cNmrData = predictCNMR(mol2Json, mol2, RDKit);
           mol2.delete();
         }
       } catch(e) { /* NMR prediction failed */ }
       if (myNmrId !== nmrConversionId) return; // stale
-      showNMRResult(nmrData);
+      showNMRResult(hNmrData, cNmrData);
     }, 0);
   }
 
@@ -2485,10 +2709,9 @@
         <div class="viewer-3d-source" id="viewer-3d-source"></div>
       </div>` : ''}
       <div class="nmr-card" id="nmr-card">
-        <div class="section-label"><sup>1</sup>H NMR Prediction <span class="nmr-freq-badge">${SPEC_FREQ} MHz</span></div>
         <div class="nmr-loading" id="nmr-loading">
           <div class="spinner"></div>
-          <span>Predicting NMR spectrum\u2026</span>
+          <span>Predicting NMR spectra\u2026</span>
         </div>
       </div>
     `;
@@ -2507,34 +2730,73 @@
   }
 
   // ── Inject NMR results into the loading placeholder ──
-  function showNMRResult(nmrData) {
+  function showNMRResult(hNmrData, cNmrData) {
     const card = document.getElementById('nmr-card');
     if (!card) return;
 
-    if (!nmrData || !nmrData.peaks || nmrData.peaks.length === 0) {
-      card.remove(); // No H atoms — hide the NMR card entirely
+    const hasH = hNmrData && hNmrData.peaks && hNmrData.peaks.length > 0;
+    const hasC = cNmrData && cNmrData.peaks && cNmrData.peaks.length > 0;
+
+    if (!hasH && !hasC) {
+      card.remove();
       return;
     }
 
     const loading = document.getElementById('nmr-loading');
     if (loading) loading.remove();
 
-    const hasLabile = nmrData.peaks.some(p => p.isLabile);
+    let html = '';
+
+    // ¹H NMR dropdown
+    if (hasH) {
+      const hasLabile = hNmrData.peaks.some(p => p.isLabile);
+      html += `
+        <div class="nmr-dropdown">
+          <div class="nmr-dropdown-header" onclick="toggleNMRDropdown(this)">
+            <span class="nmr-dropdown-arrow">\u25b6</span>
+            <span class="section-label" style="margin-bottom:0"><sup>1</sup>H NMR Prediction <span class="nmr-freq-badge">${SPEC_FREQ} MHz</span></span>
+          </div>
+          <div class="nmr-dropdown-content">
+            <div class="nmr-spectrum-container" style="margin-top:0.6rem">
+              ${renderNMRSpectrumHTML(hNmrData.peaks, { prefix: 'hnmr', rangeMin: -1, rangeMax: 15, showIntegToggle: true })}
+            </div>
+            <table class="mass-pct-table nmr-peak-table">
+              <thead><tr><th>\u03b4 (ppm)</th><th>H</th><th>Multiplicity</th><th><i>J</i> (Hz)</th><th>Assignment</th></tr></thead>
+              <tbody>${buildNMRTable(hNmrData.peaks)}</tbody>
+            </table>
+            <div class="nmr-disclaimer">Rule-based prediction (${SPEC_FREQ} MHz) \u2014 not a substitute for experimental data${hasLabile ? ' \u00b7 * Labile protons (OH, NH) appear as broad signals; position varies with solvent' : ''}</div>
+          </div>
+        </div>`;
+    }
+
+    // ¹³C NMR dropdown
+    if (hasC) {
+      html += `
+        <div class="nmr-dropdown">
+          <div class="nmr-dropdown-header" onclick="toggleNMRDropdown(this)">
+            <span class="nmr-dropdown-arrow">\u25b6</span>
+            <span class="section-label" style="margin-bottom:0"><sup>13</sup>C NMR Prediction <span class="nmr-freq-badge">${SPEC_FREQ} MHz</span></span>
+          </div>
+          <div class="nmr-dropdown-content">
+            <div class="nmr-spectrum-container" style="margin-top:0.6rem">
+              ${renderNMRSpectrumHTML(cNmrData.peaks, { prefix: 'cnmr', rangeMin: 0, rangeMax: 250, showIntegToggle: false })}
+            </div>
+            <table class="mass-pct-table nmr-peak-table">
+              <thead><tr><th>\u03b4 (ppm)</th><th>C</th><th>Assignment</th></tr></thead>
+              <tbody>${buildCNMRTable(cNmrData.peaks)}</tbody>
+            </table>
+            <div class="nmr-disclaimer">Rule-based prediction \u2014 broadband decoupled \u2014 not a substitute for experimental data</div>
+          </div>
+        </div>`;
+    }
+
     const content = document.createElement('div');
-    content.innerHTML = `
-      <div class="nmr-spectrum-container">
-        ${renderNMRSpectrumHTML(nmrData.peaks)}
-      </div>
-      <table class="mass-pct-table nmr-peak-table">
-        <thead><tr><th>\u03b4 (ppm)</th><th>H</th><th>Multiplicity</th><th><i>J</i> (Hz)</th><th>Assignment</th></tr></thead>
-        <tbody>${buildNMRTable(nmrData.peaks)}</tbody>
-      </table>
-      <div class="nmr-disclaimer">Rule-based prediction (${SPEC_FREQ} MHz) \u2014 not a substitute for experimental data${hasLabile ? ' \u00b7 * Labile protons (OH, NH) appear as broad signals; position varies with solvent' : ''}</div>
-    `;
+    content.innerHTML = html;
     while (content.firstChild) card.appendChild(content.firstChild);
 
-    // Initialize interactive viewer after DOM insertion
-    initNMRViewer(nmrData.peaks);
+    // Initialize interactive viewers after DOM insertion
+    if (hasH) initNMRViewer(hNmrData.peaks, { prefix: 'hnmr', fullMin: -1, fullMax: 15, showInteg: true });
+    if (hasC) initNMRViewer(cNmrData.peaks, { prefix: 'cnmr', fullMin: 0, fullMax: 250, showInteg: false });
   }
 
   function showError(smiles) {
