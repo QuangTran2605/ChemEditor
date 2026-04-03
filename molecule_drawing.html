@@ -549,7 +549,7 @@
     </button>
     <h1>Molecule <span class="arrow">Editor</span></h1>
     <p>Draw molecular structures and generate SMILES</p>
-    <a class="nav-link" href="smiles_to_formula.html">Formula Converter &rarr;</a>
+    <a class="nav-link" href="ChemEditor.html">Formula Converter &rarr;</a>
   </div>
 
   <div class="loading-banner" id="status-banner">
@@ -851,7 +851,7 @@
   function sendToConverter() {
     const smiles = smilesInput.value.trim();
     if (!smiles) return;
-    window.open('smiles_to_formula.html?smiles=' + encodeURIComponent(smiles), '_blank');
+    window.open('ChemEditor.html?smiles=' + encodeURIComponent(smiles), '_blank');
   }
 
   // ── Clear editor ──

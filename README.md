@@ -21,7 +21,7 @@ npx serve .
 
 Then open:
 - `http://localhost:8000/molecule_drawing.html` — Molecule Editor
-- `http://localhost:8000/smiles_to_formula.html` — Formula Converter
+- `http://localhost:8000/ChemEditor.html` — Formula Converter
 
 ## Molecule Editor (`molecule_drawing.html`)
 
@@ -42,7 +42,7 @@ Interactive molecular structure editor powered by [OpenChemLib](https://github.c
 
 Side-by-side on desktop (SMILES output on left, editor canvas on right). Stacks vertically on mobile.
 
-## Formula Converter (`smiles_to_formula.html`)
+## Formula Converter (`ChemEditor.html`)
 
 Full-featured SMILES analysis tool powered by [RDKit.js](https://github.com/rdkit/rdkit-js).
 
@@ -76,7 +76,7 @@ No npm packages. No build step. Zero runtime API dependencies.
 ```
 ChemEditor-v1.0/
 ├── molecule_drawing.html    # Molecule Editor (single-file app)
-├── smiles_to_formula.html   # Formula Converter (single-file app)
+├── ChemEditor.html   # Formula Converter (single-file app)
 ├── CLAUDE.md                # Development instructions for Claude Code
 ├── .gitignore
 └── README.md
