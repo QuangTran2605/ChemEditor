@@ -1,3 +1,7 @@
 # Local RDKit copies (large files, loaded from CDN in production)
 RDKit_minimal.js
 RDKit_minimal.wasm
+
+# Ketcher standalone build (97MB, built from https://github.com/epam/ketcher)
+# See README.md for build instructions
+ketcher/
