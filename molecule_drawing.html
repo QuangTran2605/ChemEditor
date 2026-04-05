@@ -979,19 +979,26 @@
   // ── Convert: if textarea has SMILES → load into editor; if empty → get from editor ──
   async function convert() {
     if (isUpdating || !ketcherBridge) return;
-    const smiles = smilesInput.value.trim();
-    if (smiles) {
-      // Push textarea SMILES into editor
-      const success = await loadSmiles(smiles);
-      if (!success) {
-        showSmilesError('Invalid SMILES string');
-        updateCopyData('');
+    try {
+      // Priority 1: Pull selected fragment SMILES from editor
+      if (ketcherBridge.hasSelection()) {
+        const selSmiles = await ketcherBridge.getSelectedSmiles();
+        if (selSmiles) {
+          currentSmiles = selSmiles;
+          smilesInput.value = selSmiles;
+          updateCopyData(selSmiles);
+          clearSmilesError();
+          smilesInput.classList.add('valid');
+          smilesInput.classList.remove('invalid');
+          showSourceBadge('selection');
+          if (activeExportFormat !== 'smiles') refreshExport();
+          return;
+        }
       }
-    } else {
-      // Pull SMILES from editor into textarea
-      try {
-        const editorSmiles = await ketcherBridge.getSmiles();
-        currentSmiles = editorSmiles || '';
+      // Priority 2: Pull full canvas SMILES from editor
+      const editorSmiles = await ketcherBridge.getSmiles();
+      if (editorSmiles) {
+        currentSmiles = editorSmiles;
         if (activeExportFormat === 'smiles') {
           smilesInput.value = currentSmiles;
           updateCopyData(currentSmiles);
@@ -999,18 +1006,26 @@
           refreshExport();
         }
         clearSmilesError();
-        if (currentSmiles) {
-          smilesInput.classList.add('valid');
-          smilesInput.classList.remove('invalid');
-          showSourceBadge('full-canvas');
-        } else {
-          smilesInput.classList.remove('valid', 'invalid');
-          hideSourceBadge();
-        }
-      } catch (e) {
-        console.error('Failed to get SMILES:', e);
-        showSmilesError('Could not read SMILES from editor');
+        smilesInput.classList.add('valid');
+        smilesInput.classList.remove('invalid');
+        showSourceBadge('full-canvas');
+        return;
       }
+      // Priority 3: Push textarea SMILES into editor (canvas is empty)
+      const smiles = smilesInput.value.trim();
+      if (smiles) {
+        const success = await loadSmiles(smiles);
+        if (!success) {
+          showSmilesError('Invalid SMILES string');
+          updateCopyData('');
+        }
+      } else {
+        smilesInput.classList.remove('valid', 'invalid');
+        hideSourceBadge();
+      }
+    } catch (e) {
+      console.error('Failed to convert:', e);
+      showSmilesError('Could not read SMILES from editor');
     }
   }
 
