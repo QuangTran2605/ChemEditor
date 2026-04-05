@@ -922,6 +922,7 @@
     { name: 'Alanine',       smiles: 'C[C@@H](N)C(=O)O' },
     { name: 'Urea',          smiles: 'NC(N)=O' },
     { name: 'Piperidine',    smiles: 'C1CCNCC1' },
+    { name: 'Morpholine',    smiles: 'C1COCCN1' },
   ];
 
   // ── Render template chips ──
@@ -962,7 +963,7 @@
         smilesInput.value = smiles;
         updateCopyData(smiles);
       } else {
-        refreshExport();
+        await refreshExport();
       }
       clearSmilesError();
       smilesInput.classList.remove('invalid');
@@ -990,13 +991,14 @@
     } else {
       // Pull SMILES from editor into textarea
       try {
+        isUpdating = true;
         const editorSmiles = await ketcherBridge.getSmiles();
         currentSmiles = editorSmiles || '';
         if (activeExportFormat === 'smiles') {
           smilesInput.value = currentSmiles;
           updateCopyData(currentSmiles);
         } else {
-          refreshExport();
+          await refreshExport();
         }
         clearSmilesError();
         if (currentSmiles) {
@@ -1010,6 +1012,8 @@
       } catch (e) {
         console.error('Failed to get SMILES:', e);
         showSmilesError('Could not read SMILES from editor');
+      } finally {
+        isUpdating = false;
       }
     }
   }
@@ -1059,9 +1063,11 @@
   // ── Clear SMILES input ──
   function clearInput() {
     smilesInput.value = '';
+    currentSmiles = '';
     updateCopyData('');
     clearSmilesError();
     smilesInput.classList.remove('valid', 'invalid');
+    hideSourceBadge();
   }
 
   // ── Get Selected — export SMILES for selected fragment only ──
@@ -1074,6 +1080,7 @@
       }
       const smiles = await ketcherBridge.getSelectedSmiles();
       if (smiles) {
+        currentSmiles = smiles;
         smilesInput.value = smiles;
         updateCopyData(smiles);
         clearSmilesError();
@@ -1151,7 +1158,9 @@
       case 'inchi':
       case 'inchikey':
         if (RDKit) {
+          let exported = false;
           withRDKitMol(currentSmiles, (mol) => {
+            exported = true;
             if (activeExportFormat === 'molfile') {
               const molblock = mol.get_molblock();
               smilesInput.value = molblock;
@@ -1172,6 +1181,10 @@
               }
             }
           });
+          if (!exported) {
+            smilesInput.value = 'Could not parse SMILES for export';
+            updateCopyData('');
+          }
         } else {
           smilesInput.value = 'Loading RDKit...';
           updateCopyData('');
