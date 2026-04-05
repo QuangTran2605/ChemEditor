@@ -1083,9 +1083,8 @@
     }
   }
 
-  // ── Convert: selection-aware, multi-format ──
-  // If textarea has content → detect format and load into editor.
-  // If textarea is empty → pull from editor (selected fragment if any, else full canvas).
+  // ── Convert: editor-first, selection-aware, multi-format ──
+  // Priority: (1) selected fragment → (2) full canvas → (3) textarea input into editor (canvas empty).
   async function convert() {
     if (isUpdating || !ketcherBridge) return;
     try {
