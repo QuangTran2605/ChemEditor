@@ -982,6 +982,7 @@
     { name: 'Alanine',       smiles: 'C[C@@H](N)C(=O)O' },
     { name: 'Urea',          smiles: 'NC(N)=O' },
     { name: 'Piperidine',    smiles: 'C1CCNCC1' },
+    { name: 'Morpholine',    smiles: 'C1COCCN1' },
   ];
 
   // ── Render template chips ──
@@ -1022,7 +1023,7 @@
         smilesInput.value = smiles;
         updateCopyData(smiles);
       } else {
-        refreshExport();
+        await refreshExport();
       }
       clearSmilesError();
       smilesInput.classList.remove('invalid');
@@ -1097,6 +1098,7 @@
     } else {
       // Pull from editor — selection-aware
       try {
+        isUpdating = true;
         let smiles, source;
         if (ketcherBridge.hasSelection()) {
           smiles = await ketcherBridge.getSelectedSmiles();
@@ -1110,7 +1112,7 @@
           smilesInput.value = currentSmiles;
           updateCopyData(currentSmiles);
         } else {
-          refreshExport();
+          await refreshExport();
         }
         clearSmilesError();
         if (currentSmiles) {
@@ -1124,6 +1126,8 @@
       } catch (e) {
         console.error('Failed to get structure:', e);
         showSmilesError('Could not read structure from editor');
+      } finally {
+        isUpdating = false;
       }
     }
   }
@@ -1189,6 +1193,7 @@
   // ── Clear input ──
   function clearInput() {
     smilesInput.value = '';
+    currentSmiles = '';
     updateCopyData('');
     clearSmilesError();
     smilesInput.classList.remove('valid', 'invalid');
@@ -1257,7 +1262,9 @@
       case 'inchi':
       case 'inchikey':
         if (RDKit) {
+          let exported = false;
           withRDKitMol(currentSmiles, (mol) => {
+            exported = true;
             if (activeExportFormat === 'molfile') {
               const molblock = mol.get_molblock();
               smilesInput.value = molblock;
@@ -1278,6 +1285,10 @@
               }
             }
           });
+          if (!exported) {
+            smilesInput.value = 'Could not parse SMILES for export';
+            updateCopyData('');
+          }
         } else {
           smilesInput.value = 'Loading RDKit...';
           updateCopyData('');
