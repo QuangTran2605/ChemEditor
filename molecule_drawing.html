@@ -1083,31 +1083,31 @@
     }
   }
 
-  // ── Convert: selection-aware, multi-format ──
-  // If textarea has content → detect format and load into editor.
-  // If textarea is empty → pull from editor (selected fragment if any, else full canvas).
+  // ── Convert: editor-first, selection-aware, multi-format ──
+  // Priority: (1) selected fragment → (2) full canvas → (3) textarea input into editor (canvas empty).
   async function convert() {
     if (isUpdating || !ketcherBridge) return;
-    const inputText = smilesInput.value.trim();
-    if (inputText) {
-      const success = await loadStructure(inputText);
-      if (!success && detectInputFormat(inputText) !== 'inchikey') {
-        showSmilesError('Could not parse input — check the format');
-        updateCopyData('');
-      }
-    } else {
-      // Pull from editor — selection-aware
-      try {
-        isUpdating = true;
-        let smiles, source;
-        if (ketcherBridge.hasSelection()) {
-          smiles = await ketcherBridge.getSelectedSmiles();
-          source = 'selection';
-        } else {
-          smiles = await ketcherBridge.getSmiles();
-          source = 'full-canvas';
+    try {
+      isUpdating = true;
+      // Priority 1: Pull selected fragment SMILES from editor
+      if (ketcherBridge.hasSelection()) {
+        const selSmiles = await ketcherBridge.getSelectedSmiles();
+        if (selSmiles) {
+          currentSmiles = selSmiles;
+          smilesInput.value = selSmiles;
+          updateCopyData(selSmiles);
+          clearSmilesError();
+          smilesInput.classList.add('valid');
+          smilesInput.classList.remove('invalid');
+          showSourceBadge('selection');
+          if (activeExportFormat !== 'smiles') await refreshExport();
+          return;
         }
-        currentSmiles = smiles || '';
+      }
+      // Priority 2: Pull full canvas SMILES from editor
+      const editorSmiles = await ketcherBridge.getSmiles();
+      if (editorSmiles) {
+        currentSmiles = editorSmiles;
         if (activeExportFormat === 'smiles') {
           smilesInput.value = currentSmiles;
           updateCopyData(currentSmiles);
@@ -1115,20 +1115,28 @@
           await refreshExport();
         }
         clearSmilesError();
-        if (currentSmiles) {
-          smilesInput.classList.add('valid');
-          smilesInput.classList.remove('invalid');
-          showSourceBadge(source);
-        } else {
-          smilesInput.classList.remove('valid', 'invalid');
-          hideSourceBadge();
-        }
-      } catch (e) {
-        console.error('Failed to get structure:', e);
-        showSmilesError('Could not read structure from editor');
-      } finally {
-        isUpdating = false;
+        smilesInput.classList.add('valid');
+        smilesInput.classList.remove('invalid');
+        showSourceBadge('full-canvas');
+        return;
       }
+      // Priority 3: Push textarea input into editor (canvas is empty)
+      const inputText = smilesInput.value.trim();
+      if (inputText) {
+        const success = await loadStructure(inputText);
+        if (!success && detectInputFormat(inputText) !== 'inchikey') {
+          showSmilesError('Could not parse input — check the format');
+          updateCopyData('');
+        }
+      } else {
+        smilesInput.classList.remove('valid', 'invalid');
+        hideSourceBadge();
+      }
+    } catch (e) {
+      console.error('Failed to convert:', e);
+      showSmilesError('Could not read structure from editor');
+    } finally {
+      isUpdating = false;
     }
   }
 
