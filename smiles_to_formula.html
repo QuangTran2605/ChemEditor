@@ -612,6 +612,21 @@
 
   .value-row .value { flex: 1; }
 
+  .iupac-loading {
+    color: var(--text-dim);
+    font-style: italic;
+    font-size: 0.82rem;
+  }
+
+  .iupac-name {
+    font-style: italic;
+  }
+
+  .iupac-unavailable {
+    color: var(--text-dim);
+    font-size: 0.82rem;
+  }
+
   /* ── Mass percentage table ── */
   .mass-pct-section {
     margin-top: 0.8rem;
@@ -1393,6 +1408,10 @@
   ];
 
   const SPEC_FREQ = 400; // simulated spectrometer frequency in MHz
+
+  // Shared SVG icons used by copy buttons throughout the results UI
+  const COPY_ICON = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
+  const CHECK_ICON = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
 
   // ── ¹³C NMR Shift Rules (SMARTS, most-specific first) ──
   const CNMR_SHIFT_RULES = [
@@ -3023,9 +3042,8 @@
 
     // Mass percentage calculation
     const massPctRows = buildMassPctRows(sortedAtoms, data.mw);
-
-    const copyIcon = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
-    const checkIcon = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+    const copyIcon = COPY_ICON;
+    const checkIcon = CHECK_ICON;
 
     resultContent.innerHTML = `
       <div class="result-card">
@@ -3063,6 +3081,10 @@
               <button class="copy-btn" data-copy="${escAttr(data.inchiKey)}" title="Copy InChIKey">${copyIcon}</button>
             </div>
           </div>` : ''}
+          <div class="meta-item" id="iupac-name-item" style="grid-column:1/-1">
+            <div class="label">IUPAC Name</div>
+            <div class="value iupac-loading">Looking up name\u2026</div>
+          </div>
         </div>
         <div class="atom-bar-section">
           <div class="section-label">Composition</div>
@@ -3128,7 +3150,118 @@
       generate3DAndInit(data.canonical);
     }
 
+    // Fetch IUPAC name: PubChem → CACTUS SMILES → CACTUS InChIKey
+    fetchIUPACName(data.canonical, data.inchiKey);
+
     resultsEl.classList.add('visible');
+  }
+
+  // ── Fetch IUPAC name: PubChem → CACTUS (SMILES) → CACTUS (InChIKey) ──
+  let iupacConversionId = 0;
+  let iupacAbortController = null;
+
+  // Compose an abort signal with a timeout, falling back for older browsers
+  function signalWithTimeout(ac, ms) {
+    if (typeof AbortSignal.any === 'function' && typeof AbortSignal.timeout === 'function') {
+      return AbortSignal.any([ac.signal, AbortSignal.timeout(ms)]);
+    }
+    // Fallback: wire a manual timeout to the shared controller
+    const id = setTimeout(() => ac.abort(), ms);
+    ac.signal.addEventListener('abort', () => clearTimeout(id), { once: true });
+    return ac.signal;
+  }
+
+  function showIUPACName(name) {
+    const item = document.getElementById('iupac-name-item');
+    if (!item) return;
+    item.innerHTML = `
+      <div class="label">IUPAC Name</div>
+      <div class="value-row">
+        <div class="value iupac-name">${escHtml(name)}</div>
+        <button class="copy-btn" data-copy="${escAttr(name)}" title="Copy IUPAC name">${COPY_ICON}</button>
+      </div>`;
+    item.querySelector('.copy-btn').addEventListener('click', function() { copyToClipboard(this); });
+  }
+
+  function showIUPACUnavailable() {
+    const item = document.getElementById('iupac-name-item');
+    if (!item) return;
+    item.innerHTML = `
+      <div class="label">IUPAC Name</div>
+      <div class="value iupac-unavailable">Not available</div>`;
+  }
+
+  // Layer 1: PubChem PUG REST — POST avoids stereo SMILES URL-encoding issues
+  function fetchIUPACFromPubChem(smiles, signal) {
+    const url = 'https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/smiles/property/IUPACName/JSON';
+    return fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'smiles=' + encodeURIComponent(smiles),
+      signal
+    })
+      .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(json => {
+        const name = json.PropertyTable?.Properties?.[0]?.IUPACName;
+        if (!name) throw new Error('pubchem: empty response');
+        return name;
+      });
+  }
+
+  // Shared CACTUS response validator
+  function validateCACTUSResponse(text) {
+    const name = text.trim().split('\n')[0];
+    if (!name) throw new Error('cactus: empty response');
+    if (name.startsWith('<!') || name.startsWith('<html'))
+      throw new Error('cactus: html error page');
+    if (/^(page not found|error|not found)/i.test(name))
+      throw new Error('cactus: text error');
+    return name;
+  }
+
+  // Layer 2: NCI/CACTUS via SMILES — un-encode %2F so stereo slashes stay literal
+  function fetchIUPACFromCACTUS(smiles, signal) {
+    const encoded = encodeURIComponent(smiles).replace(/%2F/gi, '/');
+    const url = 'https://cactus.nci.nih.gov/chemical/structure/' + encoded + '/iupac_name';
+    return fetch(url, { signal })
+      .then(r => { if (!r.ok) throw new Error(r.status); return r.text(); })
+      .then(validateCACTUSResponse);
+  }
+
+  // Layer 3: NCI/CACTUS via InChIKey — URL-safe (letters + hyphens only)
+  function fetchIUPACFromCACTUSKey(inchiKey, signal) {
+    if (!inchiKey) return Promise.reject(new Error('no inchikey'));
+    const url = 'https://cactus.nci.nih.gov/chemical/structure/' + inchiKey + '/iupac_name';
+    return fetch(url, { signal })
+      .then(r => { if (!r.ok) throw new Error(r.status); return r.text(); })
+      .then(validateCACTUSResponse);
+  }
+
+  // Orchestrator: PubChem → CACTUS SMILES → CACTUS InChIKey → "Not available"
+  function fetchIUPACName(smiles, inchiKey) {
+    if (iupacAbortController) iupacAbortController.abort();
+    const myId = ++iupacConversionId;
+    const ac = new AbortController();
+    iupacAbortController = ac;
+
+    fetchIUPACFromPubChem(smiles, signalWithTimeout(ac, 8000))
+      .catch(() => {
+        if (ac.signal.aborted) throw new Error('aborted');
+        return fetchIUPACFromCACTUS(smiles, signalWithTimeout(ac, 6000));
+      })
+      .catch(() => {
+        if (ac.signal.aborted) throw new Error('aborted');
+        return fetchIUPACFromCACTUSKey(inchiKey, signalWithTimeout(ac, 6000));
+      })
+      .then(name => {
+        if (myId !== iupacConversionId) return;
+        showIUPACName(name);
+      })
+      .catch(err => {
+        if (myId !== iupacConversionId) return;
+        console.debug('IUPAC lookup failed:', err?.message || err);
+        showIUPACUnavailable();
+      });
   }
 
   // ── Inject NMR results into the loading placeholder ──
@@ -3503,9 +3636,8 @@
     navigator.clipboard.writeText(text).then(() => {
       btn.classList.add('copied');
       const orig = btn.innerHTML;
-      const checkIcon = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
       const label = btn.textContent.trim();
-      btn.innerHTML = label ? checkIcon + ' ' + label : checkIcon;
+      btn.innerHTML = label ? CHECK_ICON + ' ' + label : CHECK_ICON;
       setTimeout(() => { btn.classList.remove('copied'); btn.innerHTML = orig; }, 1500);
     });
   }
