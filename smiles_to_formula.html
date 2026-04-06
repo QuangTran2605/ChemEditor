@@ -3160,15 +3160,19 @@
   let iupacConversionId = 0;
   let iupacAbortController = null;
 
-  // Compose an abort signal with a timeout, falling back for older browsers
+  // Compose an abort signal with a timeout, falling back for older browsers.
+  // Uses a per-request controller so a layer timeout never aborts the shared
+  // ac — only a true user-cancel (new conversion) sets ac.signal.aborted.
   function signalWithTimeout(ac, ms) {
     if (typeof AbortSignal.any === 'function' && typeof AbortSignal.timeout === 'function') {
       return AbortSignal.any([ac.signal, AbortSignal.timeout(ms)]);
     }
-    // Fallback: wire a manual timeout to the shared controller
-    const id = setTimeout(() => ac.abort(), ms);
-    ac.signal.addEventListener('abort', () => clearTimeout(id), { once: true });
-    return ac.signal;
+    // Fallback: per-request controller keeps timeout isolated from shared ac
+    const rc = new AbortController();
+    const id = setTimeout(() => rc.abort(), ms);
+    if (ac.signal.aborted) { clearTimeout(id); rc.abort(); }
+    else ac.signal.addEventListener('abort', () => { clearTimeout(id); rc.abort(); }, { once: true });
+    return rc.signal;
   }
 
   function showIUPACName(name) {
